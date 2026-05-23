@@ -161,6 +161,8 @@ export default function UltimateRacingGame() {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [steering, setSteering] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(null);
+  const [activeTouchButtons, setActiveTouchButtons] = useState({});
 
   const [obstacles] = useState(
     Array.from({ length: 6 }).map((_, i) => ({
@@ -172,6 +174,7 @@ export default function UltimateRacingGame() {
     }))
   );
 
+  // Keyboard Controls
   useEffect(() => {
     const down = (e) => {
       if (e.key === 'ArrowLeft' || e.key === 'a') {
@@ -212,6 +215,65 @@ export default function UltimateRacingGame() {
     };
   }, [gameOver]);
 
+  // Touch Controls - Tilt Steering
+  useEffect(() => {
+    const handleTouchMove = (e) => {
+      if (e.touches.length === 0) return;
+      
+      const touch = e.touches[0];
+      const screenWidth = window.innerWidth;
+      const screenCenter = screenWidth / 2;
+      
+      const touchX = touch.clientX;
+      const offset = touchX - screenCenter;
+      const maxOffset = screenWidth / 4;
+      
+      // Calculate steering based on touch position (-0.15 to 0.15)
+      const newSteering = (offset / maxOffset) * 0.15;
+      setSteering(Math.max(-0.15, Math.min(0.15, newSteering)));
+    };
+
+    const handleTouchEnd = () => {
+      setSteering(0);
+    };
+
+    window.addEventListener('touchmove', handleTouchMove);
+    window.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
+  // Touch Button Controls
+  const handleTouchButtonDown = (button) => {
+    setActiveTouchButtons((prev) => ({ ...prev, [button]: true }));
+
+    if (button === 'left') {
+      setSteering(-0.15);
+    } else if (button === 'right') {
+      setSteering(0.15);
+    } else if (button === 'speedUp') {
+      setSpeed((s) => Math.min(s + 10, 320));
+    } else if (button === 'speedDown') {
+      setSpeed((s) => Math.max(s - 10, 60));
+    } else if (button === 'start') {
+      setGameStarted(true);
+      if (gameOver) {
+        window.location.reload();
+      }
+    }
+  };
+
+  const handleTouchButtonUp = (button) => {
+    setActiveTouchButtons((prev) => ({ ...prev, [button]: false }));
+    
+    if (button === 'left' || button === 'right') {
+      setSteering(0);
+    }
+  };
+
   useEffect(() => {
     if (!gameStarted || gameOver) return;
 
@@ -238,6 +300,7 @@ export default function UltimateRacingGame() {
 
             <div className="text-left text-lg space-y-2 mb-8">
               <p>⬅️ ➡️ Arrow Keys / A D = Steering</p>
+              <p>📱 Tilt Phone / Touch Left/Right = Mobile Steering</p>
               <p>⬆️ ⬇️ Arrow Keys / W S = Speed Control</p>
               <p>SPACE = Start / Restart</p>
               <p>Avoid Blue Traffic Cars</p>
@@ -286,6 +349,70 @@ export default function UltimateRacingGame() {
         <div className="bg-black/60 px-4 py-2 rounded-xl border border-yellow-500">
           SCORE: {score}
         </div>
+      </div>
+
+      {/* Mobile Touch Controls */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 p-4 flex gap-4 justify-center md:hidden">
+        {/* Steering Buttons */}
+        <button
+          onTouchStart={() => handleTouchButtonDown('left')}
+          onTouchEnd={() => handleTouchButtonUp('left')}
+          onMouseDown={() => handleTouchButtonDown('left')}
+          onMouseUp={() => handleTouchButtonUp('left')}
+          className={`w-16 h-16 rounded-full font-bold text-2xl transition-all ${
+            activeTouchButtons['left']
+              ? 'bg-yellow-400 text-black scale-110'
+              : 'bg-yellow-500/60 text-white'
+          }`}
+        >
+          ⬅️
+        </button>
+
+        {/* Speed Controls */}
+        <div className="flex flex-col gap-2">
+          <button
+            onTouchStart={() => handleTouchButtonDown('speedUp')}
+            onTouchEnd={() => handleTouchButtonUp('speedUp')}
+            onMouseDown={() => handleTouchButtonDown('speedUp')}
+            onMouseUp={() => handleTouchButtonUp('speedUp')}
+            className={`w-16 h-8 rounded-full font-bold text-lg transition-all ${
+              activeTouchButtons['speedUp']
+                ? 'bg-green-400 text-black scale-105'
+                : 'bg-green-500/60 text-white'
+            }`}
+          >
+            ⬆️
+          </button>
+
+          <button
+            onTouchStart={() => handleTouchButtonDown('speedDown')}
+            onTouchEnd={() => handleTouchButtonUp('speedDown')}
+            onMouseDown={() => handleTouchButtonDown('speedDown')}
+            onMouseUp={() => handleTouchButtonUp('speedDown')}
+            className={`w-16 h-8 rounded-full font-bold text-lg transition-all ${
+              activeTouchButtons['speedDown']
+                ? 'bg-red-400 text-black scale-105'
+                : 'bg-red-500/60 text-white'
+            }`}
+          >
+            ⬇️
+          </button>
+        </div>
+
+        {/* Steering Right Button */}
+        <button
+          onTouchStart={() => handleTouchButtonDown('right')}
+          onTouchEnd={() => handleTouchButtonUp('right')}
+          onMouseDown={() => handleTouchButtonDown('right')}
+          onMouseUp={() => handleTouchButtonUp('right')}
+          className={`w-16 h-16 rounded-full font-bold text-2xl transition-all ${
+            activeTouchButtons['right']
+              ? 'bg-yellow-400 text-black scale-110'
+              : 'bg-yellow-500/60 text-white'
+          }`}
+        >
+          ➡️
+        </button>
       </div>
 
       <Canvas shadows camera={{ position: [0, 5, 10], fov: 60 }}>
