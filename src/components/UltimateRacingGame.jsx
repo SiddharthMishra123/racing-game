@@ -161,8 +161,8 @@ export default function UltimateRacingGame() {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
   const [steering, setSteering] = useState(0);
-  const [touchStartX, setTouchStartX] = useState(null);
   const [activeTouchButtons, setActiveTouchButtons] = useState({});
+  const [isMobile, setIsMobile] = useState(false);
 
   const [obstacles] = useState(
     Array.from({ length: 6 }).map((_, i) => ({
@@ -174,36 +174,56 @@ export default function UltimateRacingGame() {
     }))
   );
 
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsMobile(isMobileDevice);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
   // Keyboard Controls
   useEffect(() => {
+    const keysPressed = {};
+
     const down = (e) => {
-      if (e.key === 'ArrowLeft' || e.key === 'a') {
+      keysPressed[e.key] = true;
+
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
         setSteering(-0.15);
       }
 
-      if (e.key === 'ArrowRight' || e.key === 'd') {
+      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
         setSteering(0.15);
       }
 
-      if (e.key === 'ArrowUp' || e.key === 'w') {
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
         setSpeed((s) => Math.min(s + 10, 320));
       }
 
-      if (e.key === 'ArrowDown' || e.key === 's') {
+      if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') {
         setSpeed((s) => Math.max(s - 10, 60));
       }
 
       if (e.key === ' ') {
-        setGameStarted(true);
-
-        if (gameOver) {
+        e.preventDefault();
+        if (!gameStarted) {
+          setGameStarted(true);
+        } else if (gameOver) {
           window.location.reload();
         }
       }
     };
 
-    const up = () => {
-      setSteering(0);
+    const up = (e) => {
+      keysPressed[e.key] = false;
+      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A' || 
+          e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        setSteering(0);
+      }
     };
 
     window.addEventListener('keydown', down);
@@ -213,10 +233,20 @@ export default function UltimateRacingGame() {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
     };
-  }, [gameOver]);
+  }, [gameStarted, gameOver]);
 
-  // Touch Controls - Tilt Steering
+  // Touch/Accelerometer Controls for Mobile
   useEffect(() => {
+    if (!isMobile) return;
+
+    const handleDeviceOrientation = (event) => {
+      const gamma = event.gamma; // Left-right tilt (-90 to 90)
+      
+      // Convert tilt to steering value (-0.15 to 0.15)
+      const steeringValue = (gamma / 90) * 0.15;
+      setSteering(Math.max(-0.15, Math.min(0.15, steeringValue)));
+    };
+
     const handleTouchMove = (e) => {
       if (e.touches.length === 0) return;
       
@@ -228,7 +258,6 @@ export default function UltimateRacingGame() {
       const offset = touchX - screenCenter;
       const maxOffset = screenWidth / 4;
       
-      // Calculate steering based on touch position (-0.15 to 0.15)
       const newSteering = (offset / maxOffset) * 0.15;
       setSteering(Math.max(-0.15, Math.min(0.15, newSteering)));
     };
@@ -237,14 +266,29 @@ export default function UltimateRacingGame() {
       setSteering(0);
     };
 
+    // Request permission for iOS 13+
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission()
+        .then((permissionState) => {
+          if (permissionState === 'granted') {
+            window.addEventListener('deviceorientation', handleDeviceOrientation);
+          }
+        })
+        .catch(console.error);
+    } else {
+      // Non-iOS 13 devices
+      window.addEventListener('deviceorientation', handleDeviceOrientation);
+    }
+
     window.addEventListener('touchmove', handleTouchMove);
     window.addEventListener('touchend', handleTouchEnd);
 
     return () => {
+      window.removeEventListener('deviceorientation', handleDeviceOrientation);
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, []);
+  }, [isMobile]);
 
   // Touch Button Controls
   const handleTouchButtonDown = (button) => {
@@ -259,8 +303,9 @@ export default function UltimateRacingGame() {
     } else if (button === 'speedDown') {
       setSpeed((s) => Math.max(s - 10, 60));
     } else if (button === 'start') {
-      setGameStarted(true);
-      if (gameOver) {
+      if (!gameStarted) {
+        setGameStarted(true);
+      } else if (gameOver) {
         window.location.reload();
       }
     }
@@ -290,20 +335,30 @@ export default function UltimateRacingGame() {
       {!gameStarted && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/90">
           <div className="text-center max-w-2xl p-8 rounded-3xl border border-yellow-500 bg-zinc-900 shadow-2xl">
-            <h1 className="text-6xl font-black text-yellow-400 mb-6">
+            <h1 className="text-4xl md:text-6xl font-black text-yellow-400 mb-6">
               BMW HIGHWAY RACER
             </h1>
 
-            <p className="text-xl mb-4 text-zinc-300">
+            <p className="text-lg md:text-xl mb-4 text-zinc-300">
               Ultra Realistic 3D Racing Experience
             </p>
 
-            <div className="text-left text-lg space-y-2 mb-8">
-              <p>⬅️ ➡️ Arrow Keys / A D = Steering</p>
-              <p>📱 Tilt Phone / Touch Left/Right = Mobile Steering</p>
-              <p>⬆️ ⬇️ Arrow Keys / W S = Speed Control</p>
-              <p>SPACE = Start / Restart</p>
-              <p>Avoid Blue Traffic Cars</p>
+            <div className="text-left text-sm md:text-lg space-y-2 mb-8">
+              {isMobile ? (
+                <>
+                  <p>📱 Tilt Phone = Steering</p>
+                  <p>Or Use Touch Buttons Below</p>
+                  <p>⬆️ ⬇️ Buttons = Speed Control</p>
+                  <p>Avoid Blue Traffic Cars</p>
+                </>
+              ) : (
+                <>
+                  <p>⬅️ ➡️ Arrow Keys / A D = Steering</p>
+                  <p>⬆️ ⬇️ Arrow Keys / W S = Speed Control</p>
+                  <p>SPACE = Start / Restart</p>
+                  <p>Avoid Blue Traffic Cars</p>
+                </>
+              )}
             </div>
 
             <button
@@ -318,17 +373,17 @@ export default function UltimateRacingGame() {
 
       {gameOver && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/90">
-          <div className="bg-zinc-900 border border-red-500 p-10 rounded-3xl text-center shadow-2xl">
-            <h1 className="text-6xl font-black text-red-500 mb-4">
+          <div className="bg-zinc-900 border border-red-500 p-8 md:p-10 rounded-3xl text-center shadow-2xl max-w-md">
+            <h1 className="text-4xl md:text-6xl font-black text-red-500 mb-4">
               GAME OVER
             </h1>
 
-            <p className="text-3xl mb-2">Final Score: {score}</p>
-            <p className="text-2xl mb-6">Distance: {distance} m</p>
+            <p className="text-2xl md:text-3xl mb-2">Final Score: {score}</p>
+            <p className="text-xl md:text-2xl mb-6">Distance: {distance} m</p>
 
             <button
               onClick={() => window.location.reload()}
-              className="bg-red-500 px-8 py-4 rounded-2xl text-2xl font-bold"
+              className="bg-red-500 px-8 py-4 rounded-2xl text-2xl font-bold hover:scale-105 transition"
             >
               RESTART
             </button>
@@ -337,83 +392,85 @@ export default function UltimateRacingGame() {
       )}
 
       {/* HUD */}
-      <div className="absolute top-0 left-0 z-10 p-6 flex gap-6 text-xl font-bold">
-        <div className="bg-black/60 px-4 py-2 rounded-xl border border-yellow-500">
+      <div className="absolute top-0 left-0 z-10 p-4 md:p-6 flex flex-col md:flex-row gap-2 md:gap-6 text-sm md:text-xl font-bold">
+        <div className="bg-black/60 px-3 md:px-4 py-2 rounded-xl border border-yellow-500">
           SPEED: {speed} km/h
         </div>
 
-        <div className="bg-black/60 px-4 py-2 rounded-xl border border-yellow-500">
+        <div className="bg-black/60 px-3 md:px-4 py-2 rounded-xl border border-yellow-500">
           DISTANCE: {distance} m
         </div>
 
-        <div className="bg-black/60 px-4 py-2 rounded-xl border border-yellow-500">
+        <div className="bg-black/60 px-3 md:px-4 py-2 rounded-xl border border-yellow-500">
           SCORE: {score}
         </div>
       </div>
 
       {/* Mobile Touch Controls */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 p-4 flex gap-4 justify-center md:hidden">
-        {/* Steering Buttons */}
-        <button
-          onTouchStart={() => handleTouchButtonDown('left')}
-          onTouchEnd={() => handleTouchButtonUp('left')}
-          onMouseDown={() => handleTouchButtonDown('left')}
-          onMouseUp={() => handleTouchButtonUp('left')}
-          className={`w-16 h-16 rounded-full font-bold text-2xl transition-all ${
-            activeTouchButtons['left']
-              ? 'bg-yellow-400 text-black scale-110'
-              : 'bg-yellow-500/60 text-white'
-          }`}
-        >
-          ⬅️
-        </button>
-
-        {/* Speed Controls */}
-        <div className="flex flex-col gap-2">
+      {isMobile && gameStarted && !gameOver && (
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-4 flex gap-2 justify-center">
+          {/* Steering Buttons */}
           <button
-            onTouchStart={() => handleTouchButtonDown('speedUp')}
-            onTouchEnd={() => handleTouchButtonUp('speedUp')}
-            onMouseDown={() => handleTouchButtonDown('speedUp')}
-            onMouseUp={() => handleTouchButtonUp('speedUp')}
-            className={`w-16 h-8 rounded-full font-bold text-lg transition-all ${
-              activeTouchButtons['speedUp']
-                ? 'bg-green-400 text-black scale-105'
-                : 'bg-green-500/60 text-white'
+            onTouchStart={() => handleTouchButtonDown('left')}
+            onTouchEnd={() => handleTouchButtonUp('left')}
+            onMouseDown={() => handleTouchButtonDown('left')}
+            onMouseUp={() => handleTouchButtonUp('left')}
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full font-bold text-xl md:text-2xl transition-all ${
+              activeTouchButtons['left']
+                ? 'bg-yellow-400 text-black scale-110 shadow-lg shadow-yellow-400'
+                : 'bg-yellow-500/60 text-white'
             }`}
           >
-            ⬆️
+            ⬅️
           </button>
 
+          {/* Speed Controls */}
+          <div className="flex flex-col gap-1">
+            <button
+              onTouchStart={() => handleTouchButtonDown('speedUp')}
+              onTouchEnd={() => handleTouchButtonUp('speedUp')}
+              onMouseDown={() => handleTouchButtonDown('speedUp')}
+              onMouseUp={() => handleTouchButtonUp('speedUp')}
+              className={`w-14 h-6 md:w-16 md:h-8 rounded-full font-bold text-sm md:text-lg transition-all ${
+                activeTouchButtons['speedUp']
+                  ? 'bg-green-400 text-black scale-105 shadow-lg shadow-green-400'
+                  : 'bg-green-500/60 text-white'
+              }`}
+            >
+              ⬆️
+            </button>
+
+            <button
+              onTouchStart={() => handleTouchButtonDown('speedDown')}
+              onTouchEnd={() => handleTouchButtonUp('speedDown')}
+              onMouseDown={() => handleTouchButtonDown('speedDown')}
+              onMouseUp={() => handleTouchButtonUp('speedDown')}
+              className={`w-14 h-6 md:w-16 md:h-8 rounded-full font-bold text-sm md:text-lg transition-all ${
+                activeTouchButtons['speedDown']
+                  ? 'bg-red-400 text-black scale-105 shadow-lg shadow-red-400'
+                  : 'bg-red-500/60 text-white'
+              }`}
+            >
+              ⬇️
+            </button>
+          </div>
+
+          {/* Steering Right Button */}
           <button
-            onTouchStart={() => handleTouchButtonDown('speedDown')}
-            onTouchEnd={() => handleTouchButtonUp('speedDown')}
-            onMouseDown={() => handleTouchButtonDown('speedDown')}
-            onMouseUp={() => handleTouchButtonUp('speedDown')}
-            className={`w-16 h-8 rounded-full font-bold text-lg transition-all ${
-              activeTouchButtons['speedDown']
-                ? 'bg-red-400 text-black scale-105'
-                : 'bg-red-500/60 text-white'
+            onTouchStart={() => handleTouchButtonDown('right')}
+            onTouchEnd={() => handleTouchButtonUp('right')}
+            onMouseDown={() => handleTouchButtonDown('right')}
+            onMouseUp={() => handleTouchButtonUp('right')}
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full font-bold text-xl md:text-2xl transition-all ${
+              activeTouchButtons['right']
+                ? 'bg-yellow-400 text-black scale-110 shadow-lg shadow-yellow-400'
+                : 'bg-yellow-500/60 text-white'
             }`}
           >
-            ⬇️
+            ➡️
           </button>
         </div>
-
-        {/* Steering Right Button */}
-        <button
-          onTouchStart={() => handleTouchButtonDown('right')}
-          onTouchEnd={() => handleTouchButtonUp('right')}
-          onMouseDown={() => handleTouchButtonDown('right')}
-          onMouseUp={() => handleTouchButtonUp('right')}
-          className={`w-16 h-16 rounded-full font-bold text-2xl transition-all ${
-            activeTouchButtons['right']
-              ? 'bg-yellow-400 text-black scale-110'
-              : 'bg-yellow-500/60 text-white'
-          }`}
-        >
-          ➡️
-        </button>
-      </div>
+      )}
 
       <Canvas shadows camera={{ position: [0, 5, 10], fov: 60 }}>
         <ambientLight intensity={0.6} />
